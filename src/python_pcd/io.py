@@ -32,6 +32,31 @@ def datatype_to_size_type(datatype):
 
     return s, t
 
+def size_type_to_datatype(size, type):
+    """
+    Given a .pcd size/type pair, return a sensor_msgs/PointField datatype
+    """
+    if type == "F":
+        if size == 4:
+            return 7
+        if size == 8:
+            return 8
+    if type == "I":
+        if size == 1:
+            return 1
+        if size == 2:
+            return 3
+        if size == 4:
+            return 5
+    if type == "U":
+        if size == 1:
+            return 2
+        if size == 2:
+            return 4
+        if size == 4:
+            return 6
+    raise Exception("Unknown size/type pair in .pcd")
+
 def write_pcd(filename,  pointcloud, overwrite=False, viewpoint=None,
               mode='binary'):
     """
@@ -155,3 +180,75 @@ def write_pcd(filename,  pointcloud, overwrite=False, viewpoint=None,
         raise Exception("Can't write to %s: %s" %  (filename, e.message))
 
 
+
+def read_pcd(filename, cloud_header=None):
+    if not os.path.isfile(filename):
+        raise Exception("[read_pcd] File does not exist.")
+    string_array =  lambda x: x.split()
+    float_array  =  lambda x: [float(j) for j in x.split()]
+    int_array  =  lambda x: [int(j) for j in x.split()]
+    word =  lambda x: x.strip()
+    headers =  [("VERSION", float),
+               ("FIELDS", string_array),
+               ("SIZE", int_array),
+               ("TYPE", string_array),
+               ("COUNT", int_array),
+               ("WIDTH", int),
+               ("HEIGHT", int),
+               ("VIEWPOINT", float_array),
+               ("POINTS", int),
+               ("DATA", word)]
+    header = {}
+    with open(filename, "r") as pcdfile:
+        while len(headers) > 0:
+            line = pcdfile.readline()
+            if line == "":
+                raise Exception("[read_pcd] EOF reached while looking for headers.")
+            f, v = line.split(" ", 1)
+            if f.startswith("#"):
+                continue
+            if f not in zip(*headers)[0]:
+                raise Exception("[read_pcd] Field '{}' not known or duplicate.".format(f))
+            func =  headers[zip(*headers)[0].index(f)][1]
+            header[f] = func(v)
+            headers.remove((f, func))
+        data =  pcdfile.read()
+    # Check the number of points
+    if header["VERSION"] != 0.7:
+        raise Exception("[read_pcd] only PCD version 0.7 is understood.")
+    if header["DATA"] != "binary":
+        raise Exception("[read_pcd] Only binary .pcd files are readable.")
+    if header["WIDTH"] * header["HEIGHT"] != header["POINTS"]:
+        raise Exception("[read_pcd] POINTS count does not equal WIDTH*HEIGHT")
+    
+    cloud = PointCloud2()
+    cloud.point_step = sum([size * count
+                            for size, count in zip(header["SIZE"], header["COUNT"])])
+    cloud.height = header["HEIGHT"]
+    cloud.width = header["WIDTH"]
+    cloud.row_step = cloud.width * cloud.point_step
+    cloud.is_bigendian = False
+    if cloud.row_step * cloud.height != len(data):
+        raise Exception("[read_pcd] Data size mismatch.")
+    offset = 0
+    for field, size, type, count in zip(header["FIELDS"],
+                                        header["SIZE"],
+                                        header["TYPE"],
+                                        header["COUNT"]):
+        
+        if field != "_":
+            pass
+        pf =  PointField()
+        pf.count = count
+        pf.offset = offset
+        pf.name = field
+        pf.datatype = size_type_to_datatype(size, type)
+        cloud.fields.append(pf)
+        offset += size * count
+        
+    cloud.data = data
+    if cloud_header is not None:
+        cloud.header = header
+    else:
+        cloud.header.frame_id = "/pcd_cloud"
+    return cloud
