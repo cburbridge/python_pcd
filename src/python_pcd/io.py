@@ -1,5 +1,6 @@
 from sensor_msgs.msg import PointCloud2, PointField
 import sensor_msgs.point_cloud2 as pc2
+from geometry_msgs.msg import Transform
 
 import os
 
@@ -181,7 +182,7 @@ def write_pcd(filename,  pointcloud, overwrite=False, viewpoint=None,
 
 
 
-def read_pcd(filename, cloud_header=None):
+def read_pcd(filename, cloud_header=None, get_tf=True):
     if not os.path.isfile(filename):
         raise Exception("[read_pcd] File does not exist.")
     string_array =  lambda x: x.split()
@@ -251,4 +252,12 @@ def read_pcd(filename, cloud_header=None):
         cloud.header = header
     else:
         cloud.header.frame_id = "/pcd_cloud"
+        
+    if get_tf:
+        tf = Transform()
+        tf.translation.x, tf.translation.y, tf.translation.z =  header["VIEWPOINT"][0:3]
+        tf.rotation.w, tf.rotation.x, tf.rotation.y, tf.rotation.z =  header["VIEWPOINT"][3:]
+        
+        return cloud, tf
+    
     return cloud
