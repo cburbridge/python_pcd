@@ -229,7 +229,7 @@ def read_pcd(filename, cloud_header=None, get_tf=True):
     cloud.width = header["WIDTH"]
     cloud.row_step = cloud.width * cloud.point_step
     cloud.is_bigendian = False
-    if cloud.row_step * cloud.height != len(data):
+    if cloud.row_step * cloud.height > len(data):
         raise Exception("[read_pcd] Data size mismatch.")
     offset = 0
     for field, size, type, count in zip(header["FIELDS"],
@@ -247,7 +247,7 @@ def read_pcd(filename, cloud_header=None, get_tf=True):
         cloud.fields.append(pf)
         offset += size * count
         
-    cloud.data = data
+    cloud.data = data[0:cloud.row_step * cloud.height]
     if cloud_header is not None:
         cloud.header = header
     else:
